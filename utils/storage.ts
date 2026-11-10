@@ -1,7 +1,18 @@
-import { AppState, Task } from '@/types/task';
+import { AppState, Task, NotificationSettings, NotificationRecord } from '@/types/task';
 import { todayKey } from '@/utils/date';
 
 const STORAGE_KEY = 'dailyflow_state_v1';
+
+const defaultNotificationSettings = (): NotificationSettings => ({
+  enabled: false,
+  dailyReminderTime: '20:00',
+  oneDayReminderTime: '09:00',
+  secondReminderEnabled: false,
+  secondReminderTime: '18:00',
+  dailyHabitReminders: true,
+  oneDayReminders: true,
+  completionNotifications: true,
+});
 
 export const defaultState = (): AppState => ({
   oneDayTasks: [],
@@ -11,6 +22,12 @@ export const defaultState = (): AppState => ({
   activityLog: {},
   dailyAllCompleted: {},
   userName: '',
+  notifications: {
+    settings: defaultNotificationSettings(),
+    history: [],
+    permission: (typeof window !== 'undefined' && 'Notification' in window) ? Notification.permission : 'default',
+    lastSent: {},
+  },
 });
 
 export const loadState = (): AppState => {
@@ -27,6 +44,7 @@ export const loadState = (): AppState => {
       dailyTasks: Array.isArray(parsed.dailyTasks) ? parsed.dailyTasks : [],
       activityLog: parsed.activityLog && typeof parsed.activityLog === 'object' ? parsed.activityLog : {},
       dailyAllCompleted: parsed.dailyAllCompleted && typeof parsed.dailyAllCompleted === 'object' ? parsed.dailyAllCompleted : {},
+      notifications: parsed.notifications ? { ...base.notifications, ...parsed.notifications } : base.notifications,
     };
   } catch (e) {
     console.error('Failed to load state', e);

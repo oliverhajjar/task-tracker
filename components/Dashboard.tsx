@@ -8,6 +8,8 @@ import Navbar from './Navbar';
 import TaskSection from './TaskSection';
 import AddTaskModal from './AddTaskModal';
 import SettingsModal from './SettingsModal';
+import NotificationCenter from './NotificationCenter';
+import { sendBrowserNotification } from '@/utils/notifications';
 import ProgressRing from './ProgressRing';
 import WeeklyChart from './WeeklyChart';
 
@@ -129,6 +131,10 @@ export default function Dashboard() {
       setCelebrating(true);
       fireConfetti();
       const t = setTimeout(() => setCelebrating(false), 2500);
+      if (state?.notifications.settings.completionNotifications && state?.notifications.settings.enabled) {
+        sendBrowserNotification('Great job!', 'You completed all your tasks for today!');
+        addNotificationRecord('Great job!', 'You completed all your tasks for today!');
+      }
       return () => clearTimeout(t);
     }
     prevAllCompleteRef.current = allComplete;
@@ -268,6 +274,118 @@ export default function Dashboard() {
     setState((prev) => (prev ? { ...prev, theme: prev.theme === 'dark' ? 'light' : 'dark' } : prev));
   };
 
+  const notifSettings = state?.notifications.settings;
+  const notifHistory = state?.notifications.history ?? [];
+  const notifPermission = state?.notifications.permission ?? 'default';
+
+  const handleUpdateNotif = (partial: Partial<NonNullable<typeof notifSettings>>) => {
+    setState((prev) => {
+      if (!prev) return prev;
+      return { ...prev, notifications: { ...prev.notifications, settings: { ...prev.notifications.settings, ...partial } } };
+    });
+  };
+
+  const handleRequestPermission = async () => {
+    if (!('Notification' in window)) return;
+    const perm = await Notification.requestPermission();
+    setState((prev) => (prev ? { ...prev, notifications: { ...prev.notifications, permission: perm } } : prev));
+    if (perm === 'granted') {
+      handleUpdateNotif({ enabled: true });
+    }
+  };
+
+  const handleTestNotification = () => {
+    const ok = sendBrowserNotification('Task Tracker', 'This is a test notification!', 'test');
+    if (!ok) return;
+    addNotificationRecord('Task Tracker', 'This is a test notification!');
+  };
+
+  const addNotificationRecord = (title: string, message: string) => {
+    setState((prev) => {
+      if (!prev) return prev;
+      const rec = { id: newId(), title, message, createdAt: new Date().toISOString(), read: false };
+      return { ...prev, notifications: { ...prev.notifications, history: [...prev.notifications.history, rec] } };
+    });
+  };
+
+  const handleMarkRead = (id: string) => {
+    setState((prev) => {
+      if (!prev) return prev;
+      return { ...prev, notifications: { ...prev.notifications, history: prev.notifications.history.map((n) => (n.id === id ? { ...n, read: true } : n)) } };
+    });
+  };
+  const handleMarkAllRead = () => {
+    setState((prev) => {
+      if (!prev) return prev;
+      return { ...prev, notifications: { ...prev.notifications, history: prev.notifications.history.map((n) => ({ ...n, read: true })) } };
+    });
+  };
+  const handleClearNotif = () => {
+    setState((prev) => (prev ? { ...prev, notifications: { ...prev.notifications, history: [] } } : prev));
+  };
+
+  // Notification scheduler (foreground)
+  useEffect(() => {
+    if (!isLoaded || !state) return;
+    const ns = state.notifications.settings;
+    if (!ns.enabled) return;
+    const check = () => {
+      const now = new Date();
+      const hm = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+      const today = todayKey();
+      const lastSent = state.notifications.lastSent || {};
+      // One-day reminder
+      if (ns.oneDayReminders && ns.oneDayReminderTime === hm) {
+        const key = 'oneday-' + today + '-' + hm;
+        if (!lastSent[key]) {
+          const unfinished = (state.oneDayTasks || []).filter((t) => !t.completed).length;
+          if (unfinished > 0) {
+            sendBrowserNotification('Don\'t forget your tasks!', `You still have ${unfinished} unfinished task${unfinished===1?'':'s'} today.`);
+            addNotificationRecord('Don\'t forget your tasks!', `You still have ${unfinished} unfinished task${unfinished===1?'':'s'} today.`);
+            setState((prev) => prev ? { ...prev, notifications: { ...prev.notifications, lastSent: { ...prev.notifications.lastSent, [key]: today } } } : prev);
+          }
+        }
+      }
+      // Daily habit reminder
+      if (ns.dailyHabitReminders && ns.dailyReminderTime === hm) {
+        const key = 'daily-' + today + '-' + hm;
+        if (!lastSent[key]) {
+          const unfinished = (state.dailyTasks || []).filter((t) => !t.dailyCompleted).length;
+          if (unfinished > 0) {
+            sendBrowserNotification('Keep your streak alive!', `You still have ${unfinished} daily habit${unfinished===1?'':'s'} to complete.`);
+            addNotificationRecord('Keep your streak alive!', `You still have ${unfinished} daily habit${unfinished===1?'':'s'} to complete.`);
+            setState((prev) => prev ? { ...prev, notifications: { ...prev.notifications, lastSent: { ...prev.notifications.lastSent, [key]: today } } } : prev);
+          }
+        }
+      }
+      // Second reminder
+      if (ns.secondReminderEnabled && ns.secondReminderTime === hm) {
+        const key = 'second-' + today + '-' + hm;
+        if (!lastSent[key]) {
+          const od = (state.oneDayTasks || []).filter((t) => !t.completed).length;
+          const dh = (state.dailyTasks || []).filter((t) => !t.dailyCompleted).length;
+          const total = od + dh;
+          if (total > 0) {
+            sendBrowserNotification('Reminder', `You still have ${total} unfinished task${total===1?'':'s'} today.`);
+            addNotificationRecord('Reminder', `You still have ${total} unfinished task${total===1?'':'s'} today.`);
+            setState((prev) => prev ? { ...prev, notifications: { ...prev.notifications, lastSent: { ...prev.notifications.lastSent, [key]: today } } } : prev);
+          }
+        }
+      }
+      // Completion notification (when all done) - handled separately? We'll check if just became all complete
+    };
+    const interval = setInterval(check, 30 * 1000);
+    check();
+    return () => clearInterval(interval);
+  }, [isLoaded, state?.notifications.settings.enabled, state?.notifications.settings.dailyReminderTime, state?.notifications.settings.oneDayReminderTime, state?.notifications.settings.secondReminderTime, state?.notifications.settings.secondReminderEnabled, state?.oneDayTasks, state?.dailyTasks]);
+
+  // Register service worker
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch((e) => console.error('SW registration failed', e));
+    }
+  }, []);
+
   if (!isLoaded || !state) {
     return <SkeletonDashboard />;
   }
@@ -355,6 +473,14 @@ export default function Dashboard() {
           />
         </div>
 
+        {/* Notification Center */}
+        <NotificationCenter
+          history={notifHistory}
+          onMarkRead={handleMarkRead}
+          onMarkAllRead={handleMarkAllRead}
+          onClear={handleClearNotif}
+        />
+
         {/* Progress & stats */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           <div className="glass-panel p-4 sm:p-5 flex flex-col items-center justify-center gap-3">
@@ -409,10 +535,15 @@ export default function Dashboard() {
         open={settingsOpen}
         theme={state.theme}
         userName={state.userName}
+        notifSettings={state.notifications.settings}
+        notifPermission={state.notifications.permission}
         onClose={() => setSettingsOpen(false)}
         onToggleTheme={handleToggleTheme}
         onSetUserName={handleSetUserName}
         onClearAll={handleClearAll}
+        onUpdateNotif={handleUpdateNotif}
+        onRequestPermission={handleRequestPermission}
+        onTestNotification={handleTestNotification}
       />
 
       {celebrating && (

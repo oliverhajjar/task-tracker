@@ -26,4 +26,31 @@ export interface AppState {
   activityLog: Record<string, ActivityEntry>;
   dailyAllCompleted: Record<string, boolean>; // date -> all daily tasks completed
   userName: string;
+  notifications: NotificationState;
+}
+
+export interface NotificationSettings {
+  enabled: boolean;
+  dailyReminderTime: string; // HH:MM
+  oneDayReminderTime: string;
+  secondReminderEnabled: boolean;
+  secondReminderTime: string;
+  dailyHabitReminders: boolean;
+  oneDayReminders: boolean;
+  completionNotifications: boolean;
+}
+
+export interface NotificationRecord {
+  id: string;
+  title: string;
+  message: string;
+  createdAt: string;
+  read: boolean;
+}
+
+export interface NotificationState {
+  settings: NotificationSettings;
+  history: NotificationRecord[];
+  permission: NotificationPermission | 'default';
+  lastSent: Record<string, string>; // key -> dateKey to prevent duplicates
 }
