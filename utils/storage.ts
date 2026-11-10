@@ -1,7 +1,7 @@
 import { AppState, Task, NotificationSettings, NotificationRecord } from '@/types/task';
 import { todayKey } from '@/utils/date';
 
-const STORAGE_KEY = 'dailyflow_state_v1';
+const storageKey = (userId: string) => 'tasktracker_data_' + userId;
 
 const defaultNotificationSettings = (): NotificationSettings => ({
   enabled: false,
@@ -30,10 +30,10 @@ export const defaultState = (): AppState => ({
   },
 });
 
-export const loadState = (): AppState => {
+export const loadState = (userId: string): AppState => {
   if (typeof window === 'undefined') return defaultState();
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey(userId));
     if (!raw) return defaultState();
     const parsed = JSON.parse(raw) as Partial<AppState>;
     const base = defaultState();
@@ -52,10 +52,10 @@ export const loadState = (): AppState => {
   }
 };
 
-export const saveState = (state: AppState): void => {
+export const saveState = (userId: string, state: AppState): void => {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(storageKey(userId), JSON.stringify(state));
   } catch (e) {
     console.error('Failed to save state', e);
   }

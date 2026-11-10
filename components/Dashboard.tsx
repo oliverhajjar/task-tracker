@@ -3,6 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Task } from '@/types/task';
 import { loadState, saveState, newId, defaultState } from '@/utils/storage';
+import { getCurrentUser, logout } from '@/lib/auth';
+import { useRouter } from 'next/navigation';
 import { todayKey, greetingForHour, formatDateLong } from '@/utils/date';
 import Navbar from './Navbar';
 import TaskSection from './TaskSection';
@@ -14,6 +16,8 @@ import ProgressRing from './ProgressRing';
 import WeeklyChart from './WeeklyChart';
 
 export default function Dashboard() {
+  const router = useRouter();
+  const userId = getCurrentUser()?.id ?? null;
   const [state, setState] = useState<AppState | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -25,9 +29,15 @@ export default function Dashboard() {
   const confettiRef = useRef<HTMLDivElement>(null);
   const prevAllCompleteRef = useRef<boolean>(false);
 
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!userId) router.replace('/login');
+  }, [userId, router]);
+
   // Load state
   useEffect(() => {
-    let s = loadState();
+    if (!userId) return;
+    let s = loadState(userId);
     // apply daily reset if needed
     s = applyDailyReset(s);
     setState(s);
@@ -43,7 +53,7 @@ export default function Dashboard() {
 
   // Persist
   useEffect(() => {
-    if (isLoaded && state) saveState(state);
+    if (isLoaded && state && userId) saveState(userId, state);
   }, [state, isLoaded]);
 
   // Daily reset scheduler

@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 
 import React from 'react';
 import { formatDateLong } from '@/utils/date';
@@ -42,6 +43,9 @@ export default function Navbar({ theme, onToggleTheme, onOpenSettings, onOpenAdd
           >
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
+          <Link href="/account" className="h-9 px-3 rounded-xl border border-border bg-card hover:bg-muted transition flex items-center justify-center text-sm font-semibold">
+            Account
+          </Link>
           <button
             onClick={onOpenSettings}
             aria-label="Settings"
